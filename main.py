@@ -11,6 +11,10 @@ style = ttk.Style()
 
 style.configure("TNotebook.Tab", font=("TkDefaultFont", 14, "bold"))
 
+# Button Frame
+button_frame = ttk.Frame(root)
+button_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=10)
+
 notebool = ttk.Notebook(root, style="TNotebook")
 
 notes = {}
@@ -81,13 +85,12 @@ def delete_note():
             json.dump(notes, f)
 
             
-new_button = ttk.Button(root, text="New Note",
+new_button = ttk.Button(button_frame, text="New Note",
                         command=add_note, style="info.TButton")
 new_button.pack(side=tk.LEFT, padx=10, pady=10)
 
-delete_button = ttk.Button(root, text="Delete",
+delete_button = ttk.Button(button_frame, text="Delete",
                         command=delete_note, style="primary.TButton")
 delete_button.pack(side=tk.LEFT, padx=10, pady=10)
 
 root.mainloop()
-    
