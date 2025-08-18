@@ -1,96 +1,140 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import messagebox, Listbox
 import json
-from ttkbootstrap import Style 
+import os
 
-root = tk.Tk()
-root.title("Notes App")
-root.geometry("500x500")
-style = Style(theme='darkly')
-style = ttk.Style()
+class FoxNotes:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("FoxNotes")
+        self.root.geometry("800x600")
 
-style.configure("TNotebook.Tab", font=("TkDefaultFont", 14, "bold"))
+        self.notes = {}
+        self.current_file = None
 
-# Button Frame
-button_frame = ttk.Frame(root)
-button_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=10)
+        self.create_widgets()
+        self.load_notes()
 
-notebool = ttk.Notebook(root, style="TNotebook")
+    def create_widgets(self):
+        # Main frame
+        main_frame = tk.Frame(self.root)
+        main_frame.pack(fill=tk.BOTH, expand=True)
 
-notes = {}
-try:
-    with open("notes.json", "r") as f:
-        notes = json.load(f)
-except FileNotFoundError:
-    pass
+        # Sidebar
+        sidebar_frame = tk.Frame(main_frame, width=200, bg='lightgrey')
+        sidebar_frame.pack(fill=tk.Y, side=tk.LEFT)
 
-notebook = ttk.Notebook(root)
-notebook.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+        # Buttons frame
+        buttons_frame = tk.Frame(sidebar_frame, bg='lightgrey')
+        buttons_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=5)
 
-def add_note():
-    note_frame = ttk.Frame(notebook, padding=10)
-    notebook.add(note_frame, text="New Note")
-    
-    title_label = ttk.Label(note_frame, text="Title:")
-    title_label.grid(row=0, column=0, padx=10, pady=10, sticky="W")
-    
-    title_entry = ttk.Entry(note_frame, width=40)
-    title_entry.grid(row=0, column=1, padx=10, pady=10)
-    
-    content_label = ttk.Label(note_frame, text="Content:")
-    content_label.grid(row=1, column=0, padx=10, pady=10, sticky="W")
-    
-    content_entry = tk.Text(note_frame, width=40, height=10)
-    content_entry.grid(row=1, column=1, padx=10, pady=10)
-    
-    def save_note():
-        title = title_entry.get()
-        content = content_entry.get("1.0", tk.END)
-        
-        notes[title] = content.strip()
-        
-        with open("notes.json", 'w') as f:
-            json.dump(notes, f)
-        
-        note_content = tk.Text(notebook, width=40, height=10)
-        note_content.insert(tk.END, content)
-        notebook.forget(notebook.select())
-        notebook.add(note_content, text=title)
-    
-    save_button = ttk.Button(note_frame, text="Save",
-                             command=save_note, style="secondary.TButton")
-    save_button.grid(row=2, column=1, padx=10, pady=10)
-def load_notes():
-    try:
-        with open("notes.json","r") as f:
-            notes = json.load(f)
-        for title, content in notes.items():
-            note_content = tk.Text(notebook, width=10, height=10)
-            note_content.insert(tk.END,content)
-            notebook.add(note_content, text=title)
-    except FileNotFoundError:
-        pass
-    
-load_notes()
+        self.new_button = tk.Button(buttons_frame, text="New Note", command=self.new_note)
+        self.new_button.pack(side=tk.LEFT, padx=5, pady=5)
 
-def delete_note():
-    current_tab = notebook.index(notebook.select())
-    note_title = notebook.tab(current_tab, "text")
-    confirm = messagebox.askyesno("Delete Note", 
-                                  f"Are you sure you want to delete {note_title}?")
-    if confirm:
-        notebook.forget(current_tab)        
-        notes.pop(note_title)
+        self.delete_button = tk.Button(buttons_frame, text="Delete Note", command=self.delete_note)
+        self.delete_button.pack(side=tk.LEFT, padx=5, pady=5)
+
+        # Notes listbox
+        self.notes_listbox = Listbox(sidebar_frame, exportselection=False)
+        self.notes_listbox.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.notes_listbox.bind('<<ListboxSelect>>', self.on_note_select)
+
+
+        # Note content frame
+        content_frame = tk.Frame(main_frame)
+        content_frame.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
+
+        self.text_area = tk.Text(content_frame, wrap=tk.WORD)
+        self.text_area.pack(pady=10, padx=10, expand=True, fill=tk.BOTH)
+
+        # Menu
+        menu = tk.Menu(self.root)
+        self.root.config(menu=menu)
+
+        file_menu = tk.Menu(menu, tearoff=0)
+        menu.add_cascade(label="File", menu=file_menu)
+        file_menu.add_command(label="Save Note", command=self.save_note)
+        file_menu.add_separator()
+        file_menu.add_command(label="Exit", command=self.root.quit)
+
+    def on_note_select(self, event):
+        selection = event.widget.curselection()
+        if selection:
+            index = selection[0]
+            title = event.widget.get(index)
+            self.load_note_content(title)
+
+    def new_note(self):
+        self.text_area.delete(1.0, tk.END)
+        self.current_file = None
+        self.notes_listbox.selection_clear(0, tk.END)
+
+
+    def delete_note(self):
+        if not self.current_file:
+            messagebox.showwarning("No Note Selected", "Please select a note to delete.")
+            return
+
+        if messagebox.askyesno("Delete Note", f"Are you sure you want to delete '{self.current_file}'?"):
+            del self.notes[self.current_file]
+            self.current_file = None
+            self.text_area.delete(1.0, tk.END)
+            self.update_notes_list()
+            self.save_notes_to_file()
+
+
+    def save_note(self):
+        content = self.text_area.get(1.0, tk.END).strip()
+        if not content:
+            messagebox.showwarning("Empty Note", "Cannot save an empty note.")
+            return
+
+        if self.current_file and self.current_file in self.notes:
+            self.notes[self.current_file] = content
+            title = self.current_file
+        else:
+            title = content.split('\n')[0][:30]
+            if not title:
+                title = "Untitled"
+            i = 1
+            base_title = title
+            while title in self.notes:
+                title = f"{base_title} ({i})"
+                i += 1
+
+            self.notes[title] = content
+            self.current_file = title
+
+        self.update_notes_list()
+        self.save_notes_to_file()
+        # select the saved note in listbox
+        for i, item in enumerate(self.notes_listbox.get(0, tk.END)):
+            if item == title:
+                self.notes_listbox.selection_set(i)
+                break
+
+
+    def load_notes(self):
+        if os.path.exists("notes.json"):
+            with open("notes.json", "r") as f:
+                self.notes = json.load(f)
+            self.update_notes_list()
+
+    def save_notes_to_file(self):
         with open("notes.json", "w") as f:
-            json.dump(notes, f)
+            json.dump(self.notes, f, indent=4)
 
-            
-new_button = ttk.Button(button_frame, text="New Note",
-                        command=add_note, style="info.TButton")
-new_button.pack(side=tk.LEFT, padx=10, pady=10)
+    def update_notes_list(self):
+        self.notes_listbox.delete(0, tk.END)
+        for title in self.notes:
+            self.notes_listbox.insert(tk.END, title)
 
-delete_button = ttk.Button(button_frame, text="Delete",
-                        command=delete_note, style="primary.TButton")
-delete_button.pack(side=tk.LEFT, padx=10, pady=10)
+    def load_note_content(self, title):
+        self.text_area.delete(1.0, tk.END)
+        self.text_area.insert(tk.END, self.notes[title])
+        self.current_file = title
 
-root.mainloop()
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = FoxNotes(root)
+    root.mainloop()
