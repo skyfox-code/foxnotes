@@ -1,5 +1,7 @@
 import tkinter as tk
-from tkinter import messagebox, Listbox
+from tkinter import messagebox
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
 import json
 import os
 
@@ -11,41 +13,43 @@ class FoxNotes:
 
         self.notes = {}
         self.current_file = None
+        self._save_job = None
 
         self.create_widgets()
         self.load_notes()
 
     def create_widgets(self):
         # Main frame
-        main_frame = tk.Frame(self.root)
+        main_frame = ttk.Frame(self.root, padding=5)
         main_frame.pack(fill=tk.BOTH, expand=True)
 
         # Sidebar
-        sidebar_frame = tk.Frame(main_frame, width=200, bg='lightgrey')
-        sidebar_frame.pack(fill=tk.Y, side=tk.LEFT)
+        sidebar_frame = ttk.Frame(main_frame, width=200)
+        sidebar_frame.pack(fill=tk.Y, side=tk.LEFT, padx=(0, 5))
 
         # Buttons frame
-        buttons_frame = tk.Frame(sidebar_frame, bg='lightgrey')
+        buttons_frame = ttk.Frame(sidebar_frame)
         buttons_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=5)
 
-        self.new_button = tk.Button(buttons_frame, text="New Note", command=self.new_note)
-        self.new_button.pack(side=tk.LEFT, padx=5, pady=5)
+        self.new_button = ttk.Button(buttons_frame, text="New Note", command=self.new_note, bootstyle="success")
+        self.new_button.pack(side=tk.LEFT, padx=5, pady=5, fill=tk.X, expand=True)
 
-        self.delete_button = tk.Button(buttons_frame, text="Delete Note", command=self.delete_note)
-        self.delete_button.pack(side=tk.LEFT, padx=5, pady=5)
+        self.delete_button = ttk.Button(buttons_frame, text="Delete Note", command=self.delete_note, bootstyle="danger")
+        self.delete_button.pack(side=tk.LEFT, padx=5, pady=5, fill=tk.X, expand=True)
 
         # Notes listbox
-        self.notes_listbox = Listbox(sidebar_frame, exportselection=False)
+        self.notes_listbox = tk.Listbox(sidebar_frame, exportselection=False)
         self.notes_listbox.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         self.notes_listbox.bind('<<ListboxSelect>>', self.on_note_select)
 
 
         # Note content frame
-        content_frame = tk.Frame(main_frame)
+        content_frame = ttk.Frame(main_frame)
         content_frame.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
 
-        self.text_area = tk.Text(content_frame, wrap=tk.WORD)
+        self.text_area = tk.Text(content_frame, wrap=tk.WORD, relief=tk.FLAT)
         self.text_area.pack(pady=10, padx=10, expand=True, fill=tk.BOTH)
+        self.text_area.bind('<KeyRelease>', self.schedule_save)
 
         # Menu
         menu = tk.Menu(self.root)
@@ -53,9 +57,12 @@ class FoxNotes:
 
         file_menu = tk.Menu(menu, tearoff=0)
         menu.add_cascade(label="File", menu=file_menu)
-        file_menu.add_command(label="Save Note", command=self.save_note)
-        file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self.root.quit)
+
+    def schedule_save(self, event=None):
+        if self._save_job:
+            self.root.after_cancel(self._save_job)
+        self._save_job = self.root.after(1000, self.save_note)
 
     def on_note_select(self, event):
         selection = event.widget.curselection()
@@ -86,7 +93,6 @@ class FoxNotes:
     def save_note(self):
         content = self.text_area.get(1.0, tk.END).strip()
         if not content:
-            messagebox.showwarning("Empty Note", "Cannot save an empty note.")
             return
 
         if self.current_file and self.current_file in self.notes:
@@ -135,6 +141,6 @@ class FoxNotes:
         self.current_file = title
 
 if __name__ == "__main__":
-    root = tk.Tk()
+    root = ttk.Window(themename="darkly")
     app = FoxNotes(root)
     root.mainloop()
