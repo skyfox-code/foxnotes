@@ -5,15 +5,19 @@ from ttkbootstrap.constants import *
 import json
 import os
 
+STORAGE_DIR = "storage"
+
 class FoxNotes:
     def __init__(self, root):
         self.root = root
         self.root.title("FoxNotes")
         self.root.geometry("800x600")
 
-        self.notes = {}
         self.current_file = None
         self._save_job = None
+
+        # Ensure storage directory exists
+        os.makedirs(STORAGE_DIR, exist_ok=True)
 
         self.create_widgets()
         self.load_notes()
@@ -77,17 +81,40 @@ class FoxNotes:
         self.notes_listbox.selection_clear(0, tk.END)
 
 
+    def load_notes(self):
+        self.update_notes_list()
+
+    def update_notes_list(self):
+        self.notes_listbox.delete(0, tk.END)
+        for filename in os.listdir(STORAGE_DIR):
+            if filename.endswith((".md", ".txt")):
+                self.notes_listbox.insert(tk.END, filename)
+
+    def load_note_content(self, filename):
+        file_path = os.path.join(STORAGE_DIR, filename)
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            self.text_area.delete(1.0, tk.END)
+            self.text_area.insert(tk.END, content)
+            self.current_file = file_path
+        except IOError as e:
+            messagebox.showerror("Load Error", f"Could not load note: {e}")
+
     def delete_note(self):
         if not self.current_file:
             messagebox.showwarning("No Note Selected", "Please select a note to delete.")
             return
 
-        if messagebox.askyesno("Delete Note", f"Are you sure you want to delete '{self.current_file}'?"):
-            del self.notes[self.current_file]
-            self.current_file = None
-            self.text_area.delete(1.0, tk.END)
-            self.update_notes_list()
-            self.save_notes_to_file()
+        filename = os.path.basename(self.current_file)
+        if messagebox.askyesno("Delete Note", f"Are you sure you want to delete '{filename}'?"):
+            try:
+                os.remove(self.current_file)
+                self.current_file = None
+                self.text_area.delete(1.0, tk.END)
+                self.update_notes_list()
+            except OSError as e:
+                messagebox.showerror("Delete Error", f"Could not delete note: {e}")
 
 
     def save_note(self):
@@ -95,50 +122,79 @@ class FoxNotes:
         if not content:
             return
 
-        if self.current_file and self.current_file in self.notes:
-            self.notes[self.current_file] = content
-            title = self.current_file
+        if self.current_file:
+            file_path = self.current_file
         else:
-            title = content.split('\n')[0][:30]
-            if not title:
-                title = "Untitled"
+            # Generate a filename based on the first line of content
+            first_line = content.split('\n')[0][:50].strip()
+            if not first_line:
+                first_line = "Untitled"
+
+            base_filename = "".join(c for c in first_line if c.isalnum() or c in (' ', '-', '_')).strip()
+            if not base_filename:
+                base_filename = "Untitled"
+
+            filename = f"{base_filename}.md"
+            file_path = os.path.join(STORAGE_DIR, filename)
+
             i = 1
-            base_title = title
-            while title in self.notes:
-                title = f"{base_title} ({i})"
+            while os.path.exists(file_path):
+                filename = f"{base_filename} ({i}).md"
+                file_path = os.path.join(STORAGE_DIR, filename)
                 i += 1
 
-            self.notes[title] = content
-            self.current_file = title
-
-        self.update_notes_list()
-        self.save_notes_to_file()
-        # select the saved note in listbox
-        for i, item in enumerate(self.notes_listbox.get(0, tk.END)):
-            if item == title:
-                self.notes_listbox.selection_set(i)
-                break
-
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            self.current_file = file_path
+            self.update_notes_list()
+            # Select the saved note in listbox
+            filename_only = os.path.basename(file_path)
+            for i, item in enumerate(self.notes_listbox.get(0, tk.END)):
+                if item == filename_only:
+                    self.notes_listbox.selection_set(i)
+                    self.notes_listbox.see(i) # Ensure the selected item is visible
+                    break
+        except IOError as e:
+            messagebox.showerror("Save Error", f"Could not save note: {e}")
 
     def load_notes(self):
-        if os.path.exists("notes.json"):
-            with open("notes.json", "r") as f:
-                self.notes = json.load(f)
-            self.update_notes_list()
-
-    def save_notes_to_file(self):
-        with open("notes.json", "w") as f:
-            json.dump(self.notes, f, indent=4)
+        self.update_notes_list()
 
     def update_notes_list(self):
         self.notes_listbox.delete(0, tk.END)
-        for title in self.notes:
-            self.notes_listbox.insert(tk.END, title)
+        for filename in os.listdir(STORAGE_DIR):
+            if filename.endswith((".md", ".txt")):
+                self.notes_listbox.insert(tk.END, filename)
 
-    def load_note_content(self, title):
-        self.text_area.delete(1.0, tk.END)
-        self.text_area.insert(tk.END, self.notes[title])
-        self.current_file = title
+    def load_note_content(self, filename):
+        file_path = os.path.join(STORAGE_DIR, filename)
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            self.text_area.delete(1.0, tk.END)
+            self.text_area.insert(tk.END, content)
+            self.current_file = file_path
+        except IOError as e:
+            messagebox.showerror("Load Error", f"Could not load note: {e}")
+
+    def delete_note(self):
+        if not self.current_file:
+            messagebox.showwarning("No Note Selected", "Please select a note to delete.")
+            return
+
+        filename = os.path.basename(self.current_file)
+        if messagebox.askyesno("Delete Note", f"Are you sure you want to delete '{filename}'?"):
+            try:
+                os.remove(self.current_file)
+                self.current_file = None
+                self.text_area.delete(1.0, tk.END)
+                self.update_notes_list()
+            except OSError as e:
+                messagebox.showerror("Delete Error", f"Could not delete note: {e}")
+
+
+    
 
 if __name__ == "__main__":
     root = ttk.Window(themename="darkly")
